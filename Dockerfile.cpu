@@ -1,0 +1,44 @@
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    TORCH_HOME=/opt/torch_cache \
+    YOLO_CACHE=/opt/torch_cache
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl ca-certificates ffmpeg libgl1 libglib2.0-0 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /srv/app
+COPY requirements.txt ./requirements.txt
+
+# CPU-колёса
+RUN python -m pip install --upgrade pip && \
+    python -m pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cpu && \
+    python -m pip install -r requirements.txt
+
+# Копируем код и ВСЕ веса внутрь образа
+COPY . /srv/app
+COPY weights/ /srv/app/weights/
+COPY models/species/ /srv/app/models/species/
+
+RUN mkdir -p /opt/torch_cache /data/out && \
+    useradd -ms /bin/bash appuser && \
+    chown -R appuser:appuser /srv/app /opt/torch_cache /data
+
+# Жёстко фиксируем дефолтные пути к весам ВНУТРИ образа
+ENV PLANT_SEG_WEIGHTS=/srv/app/weights/plant/plant_seg.pt \
+    DEFECT_SEG_WEIGHTS=/srv/app/weights/defect/defect_seg.pt \
+    SPECIES_TS=/srv/app/models/species/model_ts.pt \
+    SPECIES_CLASSES=/srv/app/models/species/species_classes \
+    SPECIES_RU_MAP=/srv/app/models/species/species_ru_map
+
+USER appuser
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=5 \
+  CMD python - <<'PY'\nimport urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read(); print('ok')\nPY || exit 1
+
+CMD ["gunicorn","-k","uvicorn.workers.UvicornWorker","--workers","1","--threads","4","--timeout","1200","--graceful-timeout","1200","--bind","0.0.0.0:8000","app.main:app"]

@@ -1,0 +1,30 @@
+services:
+  treehealth:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    image: treehealth-cpu:latest
+
+    env_file: .env
+    environment:
+      DEVICE: cpu
+      DEPTH_DISABLE: "1"      # на CPU глубину вырубаем, чтобы не дёргало MiDaS
+    volumes:
+      - ./data:/data          # только артефакты наружу
+      - ./torch_cache:/opt/torch_cache  # опционально, чтобы кэш переживал рестарт
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+    command: >
+      gunicorn app.main:app -k uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8000
+      --workers 1
+      --timeout 1200
+      --graceful-timeout 1200

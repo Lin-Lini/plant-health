@@ -1,0 +1,32 @@
+services:
+  treehealth:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    image: treehealth-gpu:latest
+
+    gpus: all
+
+    env_file: .env
+    environment:
+      DEVICE: cuda:0
+      DEPTH_DISABLE: "0"      # на GPU глубина включена
+    volumes:
+      - ./data:/data
+      - ./torch_cache:/opt/torch_cache
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+    command: >
+      gunicorn app.main:app -k uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8000
+      --workers 1
+      --timeout 1200
+      --graceful-timeout 1200
