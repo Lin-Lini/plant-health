@@ -36,6 +36,7 @@ models/
     species_classes.json
     species_ru_map.json
 tools/
+    analyze_reports.py # Универсальный анализатор отчётов из data/out/**/report.json
 weights/
   defect/
     defect_seg.pt
